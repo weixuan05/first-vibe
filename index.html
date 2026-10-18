@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenBudget - 輕量個人記帳與預算儀表板</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen transition-colors duration-300" id="body-app">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/30">
+          💸
+        </div>
+        <div>
+          <h1 class="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">ZenBudget</h1>
+          <p class="text-xs text-slate-400">輕量個人記帳與預算視覺化工作坊</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="export-csv" class="p-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1.5 border border-slate-700 transition">
+          📥 匯出 CSV
+        </button>
+        <button id="theme-toggle" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm flex items-center gap-2 border border-slate-700">
+          <span id="theme-icon">🌙</span> <span id="theme-text" class="hidden sm:inline text-xs">深色模式</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+    <!-- Left Column: Overview Stats & Chart (5 cols) -->
+    <section class="lg:col-span-5 flex flex-col gap-6">
+
+      <!-- Financial Cards -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 shadow-lg">
+          <span class="text-[11px] text-slate-400 block font-medium">淨結餘</span>
+          <span id="stat-net" class="text-lg font-bold text-emerald-400 block mt-1">$0</span>
+        </div>
+        <div class="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 shadow-lg">
+          <span class="text-[11px] text-slate-400 block font-medium">總收入</span>
+          <span id="stat-income" class="text-lg font-bold text-teal-400 block mt-1">$0</span>
+        </div>
+        <div class="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 shadow-lg">
+          <span class="text-[11px] text-slate-400 block font-medium">總支出</span>
+          <span id="stat-expense" class="text-lg font-bold text-rose-400 block mt-1">$0</span>
+        </div>
+      </div>
+
+      <!-- Monthly Budget Bar -->
+      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/60 shadow-xl">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs font-semibold text-slate-300 flex items-center gap-1">🎯 每月預算進度</span>
+          <button id="set-budget-btn" class="text-[11px] text-emerald-400 hover:underline">設定預算</button>
+        </div>
+        <div class="w-full bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-700/50">
+          <div id="budget-progress" class="bg-emerald-500 h-full transition-all duration-500 w-0"></div>
+        </div>
+        <div class="flex justify-between items-center mt-2 text-[11px] text-slate-400">
+          <span id="budget-used-text">已使用 $0</span>
+          <span id="budget-total-text">目標 $30,000</span>
+        </div>
+      </div>
+
+      <!-- Chart Card -->
+      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/60 shadow-xl flex flex-col items-center">
+        <h2 class="text-sm font-bold text-slate-200 w-full mb-3 flex items-center gap-1.5">
+          📊 支出類別分析
+        </h2>
+        <div class="w-full max-w-[260px] relative aspect-square flex items-center justify-center">
+          <canvas id="expense-chart"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Column: Form & History List (7 cols) -->
+    <section class="lg:col-span-7 flex flex-col gap-6">
+
+      <!-- Add Transaction Form Card -->
+      <div class="bg-slate-800/80 rounded-2xl p-6 border border-slate-700/60 shadow-xl">
+        <h2 class="text-sm font-bold text-slate-100 mb-4 flex items-center gap-2">
+          ➕ 新增收支紀錄
+        </h2>
+        <form id="trans-form" class="space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">類型</label>
+              <select id="trans-type" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+                <option value="expense">🔴 支出</option>
+                <option value="income">🟢 收入</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">金額 (NT$)</label>
+              <input type="number" id="trans-amount" placeholder="例如: 150" min="1" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">類別</label>
+              <select id="trans-category" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">日期</label>
+              <input type="date" id="trans-date" required class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">備註 (可選)</label>
+            <input type="text" id="trans-note" placeholder="例如: 午餐吃牛肉麵" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+          </div>
+
+          <button type="submit" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/30 transition">
+            儲存紀錄
+          </button>
+        </form>
+      </div>
+
+      <!-- Transaction History List Card -->
+      <div class="bg-slate-800/80 rounded-2xl p-6 border border-slate-700/60 shadow-xl flex-1 flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-sm font-bold text-slate-100">📋 歷史交易明細</h2>
+          <div class="flex gap-1.5 text-xs">
+            <button data-filter="all" class="filter-btn text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/10">全部</button>
+            <button data-filter="expense" class="filter-btn text-slate-400 hover:text-slate-200 px-2 py-0.5">支出</button>
+            <button data-filter="income" class="filter-btn text-slate-400 hover:text-slate-200 px-2 py-0.5">收入</button>
+          </div>
+        </div>
+
+        <ul id="trans-list" class="space-y-2 overflow-y-auto max-h-80 pr-1 flex-1">
+          <!-- Transactions rendered here -->
+        </ul>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    // --- Categories Configuration ---
+    const CATEGORIES = {
+      expense: [
+        { name: '飲食', icon: '🍱', color: '#f43f5e' },
+        { name: '交通', icon: '🚗', color: '#3b82f6' },
+        { name: '娛樂', icon: '🎮', color: '#a855f7' },
+        { name: '購物', icon: '🛍️', color: '#ec4899' },
+        { name: '居住', icon: '🏠', color: '#f59e0b' },
+        { name: '其他', icon: '📦', color: '#64748b' }
+      ],
+      income: [
+        { name: '薪水', icon: '💼', color: '#10b981' },
+        { name: '副業', icon: '🚀', color: '#14b8a6' },
+        { name: '投資', icon: '📈', color: '#06b6d4' },
+        { name: '獎金', icon: '🎁', color: '#84cc16' }
+      ]
+    };
+
+    // --- Application State ---
+    let transactions = JSON.parse(localStorage.getItem('zb_transactions')) || [];
+    let monthlyBudget = parseFloat(localStorage.getItem('zb_budget')) || 30000;
+    let currentFilter = 'all';
+    let myChart = null;
+
+    // --- DOM Elements ---
+    const transForm = document.getElementById('trans-form');
+    const transType = document.getElementById('trans-type');
+    const transAmount = document.getElementById('trans-amount');
+    const transCategory = document.getElementById('trans-category');
+    const transDate = document.getElementById('trans-date');
+    const transNote = document.getElementById('trans-note');
+    const transList = document.getElementById('trans-list');
+
+    const statNet = document.getElementById('stat-net');
+    const statIncome = document.getElementById('stat-income');
+    const statExpense = document.getElementById('stat-expense');
+
+    const budgetProgress = document.getElementById('budget-progress');
+    const budgetUsedText = document.getElementById('budget-used-text');
+    const budgetTotalText = document.getElementById('budget-total-text');
+    const setBudgetBtn = document.getElementById('set-budget-btn');
+
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const exportCsvBtn = document.getElementById('export-csv');
+    const themeToggle = document.getElementById('theme-toggle');
+    const bodyApp = document.getElementById('body-app');
+
+    // Default Date to Today
+    transDate.value = new Date().toISOString().split('T')[0];
+
+    // --- Populate Categories ---
+    function updateCategoryDropdown() {
+      const type = transType.value;
+      transCategory.innerHTML = CATEGORIES[type].map(cat => 
+        `<option value="${cat.name}">${cat.icon} ${cat.name}</option>`
+      ).join('');
+    }
+
+    // --- Calculations & UI Updates ---
+    function updateDashboard() {
+      let totalIncome = 0;
+      let totalExpense = 0;
+      const categoryTotals = {};
+
+      transactions.forEach(t => {
+        const amt = parseFloat(t.amount);
+        if (t.type === 'income') {
+          totalIncome += amt;
+        } else {
+          totalExpense += amt;
+          categoryTotals[t.category] = (categoryTotals[t.category] || 0) + amt;
+        }
+      });
+
+      const netBalance = totalIncome - totalExpense;
+
+      statNet.textContent = `$${netBalance.toLocaleString()}`;
+      statIncome.textContent = `$${totalIncome.toLocaleString()}`;
+      statExpense.textContent = `$${totalExpense.toLocaleString()}`;
+
+      // Update Budget Bar
+      budgetTotalText.textContent = `目標 $${monthlyBudget.toLocaleString()}`;
+      budgetUsedText.textContent = `已使用 $${totalExpense.toLocaleString()}`;
+      const percentage = Math.min((totalExpense / monthlyBudget) * 100, 100);
+      budgetProgress.style.width = `${percentage}%`;
+
+      if (percentage >= 100) {
+        budgetProgress.className = 'bg-rose-600 h-full transition-all duration-500';
+      } else if (percentage >= 80) {
+        budgetProgress.className = 'bg-amber-500 h-full transition-all duration-500';
+      } else {
+        budgetProgress.className = 'bg-emerald-500 h-full transition-all duration-500';
+      }
+
+      updateChart(categoryTotals);
+      renderTransactions();
+    }
+
+    // --- Render Chart ---
+    function updateChart(categoryTotals) {
+      const labels = Object.keys(categoryTotals);
+      const data = Object.values(categoryTotals);
+
+      const backgroundColors = labels.map(catName => {
+        const catObj = CATEGORIES.expense.find(c => c.name === catName);
+        return catObj ? catObj.color : '#94a3b8';
+      });
+
+      const ctx = document.getElementById('expense-chart').getContext('2d');
+
+      if (myChart) {
+        myChart.destroy();
+      }
+
+      if (data.length === 0) {
+        myChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['尚無支出數據'],
+            datasets: [{ data: [1], backgroundColor: ['#334155'] }]
+          },
+          options: { plugins: { legend: { display: false } }, cutout: '70%' }
+        });
+        return;
+      }
+
+      myChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: backgroundColors,
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#94a3b8', font: { size: 11 } }
+            }
+          },
+          cutout: '65%'
+        }
+      });
+    }
+
+    // --- Render Transaction List ---
+    function renderTransactions() {
+      transList.innerHTML = '';
+
+      const filtered = transactions.filter(t => {
+        if (currentFilter === 'expense') return t.type === 'expense';
+        if (currentFilter === 'income') return t.type === 'income';
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        transList.innerHTML = `<li class="text-center py-8 text-slate-500 text-xs">尚無明細紀錄，新增第一筆吧！</li>`;
+        return;
+      }
+
+      filtered.forEach(t => {
+        const isExpense = t.type === 'expense';
+        const catConfig = (isExpense ? CATEGORIES.expense : CATEGORIES.income).find(c => c.name === t.category) || { icon: '📝' };
+
+        const li = document.createElement('li');
+        li.className = 'flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-700/50 hover:border-slate-600 transition';
+        li.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="text-xl p-2 rounded-lg bg-slate-800">${catConfig.icon}</span>
+            <div>
+              <div class="font-semibold text-sm text-slate-200">${escapeHtml(t.category)} <span class="text-xs font-normal text-slate-400">(${t.date})</span></div>
+              <div class="text-xs text-slate-400">${escapeHtml(t.note || '無備註')}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-bold text-sm ${isExpense ? 'text-rose-400' : 'text-teal-400'}">
+              ${isExpense ? '-' : '+'}$${parseFloat(t.amount).toLocaleString()}
+            </span>
+            <button onclick="deleteTransaction(${t.id})" class="text-slate-500 hover:text-red-400 text-xs px-1">✕</button>
+          </div>
+        `;
+        transList.appendChild(li);
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // --- Event Handlers ---
+    transForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const newTrans = {
+        id: Date.now(),
+        type: transType.value,
+        amount: parseFloat(transAmount.value),
+        category: transCategory.value,
+        date: transDate.value,
+        note: transNote.value.trim()
+      };
+
+      transactions.unshift(newTrans);
+      saveData();
+      updateDashboard();
+
+      transAmount.value = '';
+      transNote.value = '';
+    });
+
+    window.deleteTransaction = function(id) {
+      transactions = transactions.filter(t => t.id !== id);
+      saveData();
+      updateDashboard();
+    };
+
+    setBudgetBtn.addEventListener('click', () => {
+      const val = prompt('請輸入每月預算金額 (NT$):', monthlyBudget);
+      if (val && !isNaN(val) && parseFloat(val) > 0) {
+        monthlyBudget = parseFloat(val);
+        localStorage.setItem('zb_budget', monthlyBudget);
+        updateDashboard();
+      }
+    });
+
+    transType.addEventListener('change', updateCategoryDropdown);
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => {
+          b.className = 'filter-btn text-slate-400 hover:text-slate-200 px-2 py-0.5';
+        });
+        btn.className = 'filter-btn text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/10';
+        currentFilter = btn.dataset.filter;
+        renderTransactions();
+      });
+    });
+
+    exportCsvBtn.addEventListener('click', () => {
+      if (transactions.length === 0) {
+        alert('尚無資料可匯出！');
+        return;
+      }
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF日期,類型,類別,金額,備註\n";
+      transactions.forEach(t => {
+        csvContent += `${t.date},${t.type === 'expense' ? '支出' : '收入'},${t.category},${t.amount},"${t.note || ''}"\n`;
+      });
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `ZenBudget_Export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    themeToggle.addEventListener('click', () => {
+      if (bodyApp.classList.contains('bg-slate-900')) {
+        bodyApp.classList.replace('bg-slate-900', 'bg-slate-100');
+        bodyApp.classList.replace('text-slate-100', 'text-slate-800');
+        document.getElementById('theme-icon').textContent = '☀️';
+        document.getElementById('theme-text').textContent = '淺色模式';
+      } else {
+        bodyApp.classList.replace('bg-slate-100', 'bg-slate-900');
+        bodyApp.classList.replace('text-slate-800', 'text-slate-100');
+        document.getElementById('theme-icon').textContent = '🌙';
+        document.getElementById('theme-text').textContent = '深色模式';
+      }
+    });
+
+    function saveData() {
+      localStorage.setItem('zb_transactions', JSON.stringify(transactions));
+    }
+
+    // --- Initialize ---
+    updateCategoryDropdown();
+    updateDashboard();
+  </script>
+</body>
+</html>
